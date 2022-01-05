@@ -35,6 +35,6 @@ class FenetreAPropos(Toplevel):
                          "Quentin VINCENOT\n\n\u00A9 Quentin VINCENOT (2021-présent)"
         label_texte = Label(zone_texte, text=texte_a_propos)
         label_texte.pack(pady=0)
-        texte_version = "Version 1.0"
+        texte_version = "Version 1.1"
         label_version = Label(zone_texte, text=texte_version, fg='#FF9632', font=(None, 10, 'bold'))
         label_version.pack()

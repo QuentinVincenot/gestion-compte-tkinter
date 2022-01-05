@@ -1,3 +1,4 @@
+import tkinter.filedialog
 from tkinter import *
 from tkinter import ttk
 from popup_revenu import PopupRevenu
@@ -54,14 +55,17 @@ class Application:
     def __initialiser_menus__(self):
         # Initialisation du menu 'Fichier' de la fenêtre principale
         menu_bar = Menu(self.fenetre_principale)
-        menu_fichier = Menu(menu_bar, tearoff=0)
-        menu_fichier.add_command(label="Réinitialiser", command=self.__reinitialiser_liste_operations__)
-        menu_fichier.add_separator()
-        menu_fichier.add_command(label="Quitter", command=self.quitter)
-        menu_bar.add_cascade(label="Fichier", menu=menu_fichier)
+        self.menu_fichier = Menu(menu_bar, tearoff=0)
+        self.menu_fichier.add_command(label="Réinitialiser", command=self.__reinitialiser_liste_operations__)
+        self.menu_fichier.add_separator()
+        self.menu_fichier.add_command(label="Charger...", command=self.charger_liste_operations)
+        self.menu_fichier.add_command(label="Enregistrer sous...", command=self.sauvegarder_liste_operations)
+        self.menu_fichier.add_separator()
+        self.menu_fichier.add_command(label="Quitter", command=self.quitter)
+        menu_bar.add_cascade(label="Fichier", menu=self.menu_fichier)
         # Initialisation du menu 'A propos' de la fenêtre principale
         menu_a_propos = Menu(menu_bar, tearoff=0)
-        menu_a_propos.add_command(label="A propos", command=self.__ouvrir_fenetre_a_propos__)
+        menu_a_propos.add_command(label="A propos", command=self.ouvrir_fenetre_a_propos)
         menu_bar.add_cascade(label="Aide", menu=menu_a_propos)
         # Ajout du menu global à la fenêtre principale de l'application
         self.fenetre_principale.config(menu=menu_bar)
@@ -154,6 +158,8 @@ class Application:
         # Mise à jour du nombre total d'opérations dans l'historique, et du résultat dans la synthèse
         Application.NOMBRE_OPERATIONS += 1
         self.__mettre_a_jour_synthese__()
+        # Mise à jour du menu "Enregistrer sous..." si jamais c'est la première opération ajoutée
+        self.__mettre_a_jour_menu_sauvegarder__()
         # Destruction de la fenêtre popup de revenu
         self.popup_revenu = None
 
@@ -167,6 +173,8 @@ class Application:
         # Mise à jour du nombre total d'opérations dans l'historique, et du résultat dans la synthèse
         Application.NOMBRE_OPERATIONS += 1
         self.__mettre_a_jour_synthese__()
+        # Mise à jour du menu "Enregistrer sous..." si jamais c'est la première opération ajoutée
+        self.__mettre_a_jour_menu_sauvegarder__()
         # Destruction de la fenêtre popup de dépense
         self.popup_depense = None
 
@@ -185,13 +193,22 @@ class Application:
             print(error)
             pass
         finally:
+            # Mise à jour de la synthèse et du total des opérations
             self.__mettre_a_jour_synthese__()
+            # Mise à jour du statut du menu "Enregistrer sous..." si besoin
+            self.__mettre_a_jour_menu_sauvegarder__()
 
     def __mettre_a_jour_synthese__(self):
         # Calcul du résultat de toutes les opérations effectuées, listées dans l'historique
         montant_resultat_operations = round(sum([operation['montant'] for _, operation in enumerate(self.liste_operations)]), 2)
         # Mise à jour du label synthétisant le résultat dans la fenêtre principale
         self.label_total['text'] = f"Total: {montant_resultat_operations:.2f} €"
+
+    def __mettre_a_jour_menu_sauvegarder__(self):
+        # Calcul du statu du menu "Enregistrer sous..." en fonction du nombre d'opérations dans l'historique
+        statut_menu_enregistrer = "normal" if len(self.liste_operations) > 0 else "disabled"
+        # Mise à jour du statut du menu "Enregistrer sous..."
+        self.menu_fichier.entryconfig("Enregistrer sous...", state=statut_menu_enregistrer)
 
     def __reinitialiser_liste_operations__(self):
         # Vidage de la liste des opérations
@@ -202,8 +219,61 @@ class Application:
             self.table_operations.delete(ligne_operation)
         # Mise à jour de la synthèse des opérations (vierge)
         self.__mettre_a_jour_synthese__()
+        # Désactriver le menu "Enregistrer sous...", puisque la liste des opérations a été vidée
+        self.__mettre_a_jour_menu_sauvegarder__()
 
-    def __ouvrir_fenetre_a_propos__(self):
+    def charger_liste_operations(self):
+        # Ouverture du dialogue et sélection du fichier d'opérations sauvegardées
+        types_fichiers_filtres = [("Fichiers texte", ".txt")]
+        fichier_a_charger = tkinter.filedialog.askopenfile(title="Sélectionnez un fichier...",
+            initialdir="/", filetypes=types_fichiers_filtres)
+        # Vérification de la validité du fichier de sauvegarde sélectionné
+        if fichier_a_charger is not None:
+            # Réinitialisation de la liste complète des opérations, on repart d'un état vierge
+            self.__reinitialiser_liste_operations__()
+            # Ouverture du fichier et lecture des opérations ligne à ligne
+            with open(fichier_a_charger.name, 'r') as fichier_ouvert:
+                lignes_operations = fichier_ouvert.readlines()
+                for ligne_operation in lignes_operations:
+                    informations_operation = ligne_operation.replace('\n', '').split('@')
+                    nom_operation = informations_operation[0]
+                    montant_operation = round(float(informations_operation[1]), 2)
+
+                    # Ajoute l'opération dans la liste des opérations déjà effectuées
+                    self.liste_operations += [{'operation': nom_operation, 'montant': montant_operation}]
+                    # Ajoute l'opération de dépense dans la table des opérations
+                    montant_a_afficher = f"{montant_operation:.2f}" if montant_operation < 0.0 else f"+{montant_operation:.2f}"
+                    self.table_operations.insert(parent='', index='end', iid=Application.NOMBRE_OPERATIONS, text='',
+                                                 values=(nom_operation, montant_a_afficher))
+                    # Mise à jour du nombre total d'opérations dans l'historique, et du résultat dans la synthèse
+                    Application.NOMBRE_OPERATIONS += 1
+                # Mise à jour de la synthèse des opérations (avec le nombre d'opérations chargées depuis le fichier)
+                self.__mettre_a_jour_synthese__()
+                # Mise à jour du menu "Enregistrer sous..."
+                self.__mettre_a_jour_menu_sauvegarder__()
+                # Affichage d'une popup d'information comme quoi les opérations ont bien été chargées
+                tkinter.messagebox.showinfo("Opérations chargées !",
+                                            f"Les opérations courantes ont bien été chargées depuis le fichier suivant : \"{fichier_a_charger.name}\" !")
+
+    def sauvegarder_liste_operations(self):
+        # Ouverture du dialogue pour enregistrer les opérations en cours dans un fichier
+        types_fichiers_filtres = [("Fichiers texte", ".txt")]
+        fichier_de_sauvegarde = tkinter.filedialog.asksaveasfile(mode='w', defaultextension=".txt",
+            filetypes=types_fichiers_filtres)
+        if fichier_de_sauvegarde is not None:
+            # Si le fichier dans lequel enregistrer est valide, on écrit les opérations ligne par ligne
+            lignes_a_sauvegarder = []
+            for operation in self.liste_operations:
+                texte_ligne_a_sauvegarder = f"{operation['operation']}@{operation['montant']}\n"
+                lignes_a_sauvegarder += [texte_ligne_a_sauvegarder]
+            # On écrit toutes les lignes correspondant aux opérations et on ferme le fichier
+            fichier_de_sauvegarde.writelines(lignes_a_sauvegarder)
+            fichier_de_sauvegarde.close()
+            # Affichage d'une popup d'information comme quoi les opérations ont bien été enregistrées
+            tkinter.messagebox.showinfo("Opérations enregistrées !",
+                f"Les opérations courantes ont bien été enregistrées dans le fichier suivant : \"{fichier_de_sauvegarde.name}\" !")
+
+    def ouvrir_fenetre_a_propos(self):
         # Ouvrir et initialiser la fenêtre "à propos" de l'application
         self.fenetre_a_propos = FenetreAPropos(self)
 
